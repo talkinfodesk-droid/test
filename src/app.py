@@ -48,10 +48,12 @@ def generate_tts(text, language, speed, style_prompt, voice_profile, output_form
 
     progress(0.6, desc="음성 생성 중...")
 
-    # 음성 프로필 참조 오디오 경로
+    # 음성 프로필 참조 오디오 경로 및 텍스트
     ref_audio = None
+    ref_text = None
     if voice_profile and voice_profile != "기본 음성":
         ref_audio = cloner.get_reference_audio_path(voice_profile)
+        ref_text = cloner.get_reference_text(voice_profile)
 
     lang_code = LANGUAGES.get(language, "ko")
 
@@ -61,6 +63,7 @@ def generate_tts(text, language, speed, style_prompt, voice_profile, output_form
         speed=speed,
         style_prompt=style_prompt if style_prompt else None,
         reference_audio_path=ref_audio,
+        reference_text=ref_text,
     )
 
     # 형식 변환
@@ -83,7 +86,7 @@ def get_voice_choices():
 # ─────────────────────────────────────────────
 # Tab 2: 음성 클로닝
 # ─────────────────────────────────────────────
-def create_voice_profile(audio_file, profile_name):
+def create_voice_profile(audio_file, profile_name, reference_text):
     """참조 오디오로 음성 프로필을 생성합니다."""
     if audio_file is None:
         return "참조 오디오를 업로드해주세요.", get_profile_list_display()
@@ -92,7 +95,8 @@ def create_voice_profile(audio_file, profile_name):
         return "프로필 이름을 입력해주세요.", get_profile_list_display()
 
     try:
-        profile = cloner.create_profile(profile_name.strip(), audio_file)
+        ref_text = reference_text.strip() if reference_text else None
+        profile = cloner.create_profile(profile_name.strip(), audio_file, ref_text)
         info = cloner.get_audio_info(audio_file)
         status = (
             f"프로필 '{profile.name}' 생성 완료! "
@@ -131,10 +135,13 @@ def test_cloned_voice(profile_name, test_text, progress=gr.Progress()):
     if not ref_audio:
         return None, "프로필의 참조 오디오를 찾을 수 없습니다."
 
+    ref_text = cloner.get_reference_text(profile_name)
+
     progress(0.6, desc="클로닝 음성 생성 중...")
     output_path, sr = engine.generate_speech(
         text=test_text,
         reference_audio_path=ref_audio,
+        reference_text=ref_text,
     )
 
     progress(1.0, desc="완료!")
@@ -196,8 +203,10 @@ def dub_subtitles(
 
     # 음성 프로필
     ref_audio = None
+    ref_text = None
     if voice_profile and voice_profile != "기본 음성":
         ref_audio = cloner.get_reference_audio_path(voice_profile)
+        ref_text = cloner.get_reference_text(voice_profile)
 
     lang_code = LANGUAGES.get(language, "ko")
 
@@ -209,6 +218,7 @@ def dub_subtitles(
         language=lang_code,
         speed=speed,
         voice_profile_audio=ref_audio,
+        voice_profile_text=ref_text,
         style_prompt=style_prompt if style_prompt else None,
         progress_callback=dub_progress,
     )
@@ -294,6 +304,11 @@ def build_ui():
                             label="프로필 이름",
                             placeholder="예: 내 목소리, 나레이터1...",
                         )
+                        clone_ref_text = gr.Textbox(
+                            label="참조 오디오 텍스트 전사 (선택, 입력 시 품질 향상)",
+                            placeholder="참조 오디오에서 말하는 내용을 텍스트로 입력하세요...",
+                            lines=2,
+                        )
                         clone_btn = gr.Button("프로필 저장", variant="primary")
                         clone_status = gr.Textbox(label="상태", interactive=False)
 
@@ -336,7 +351,7 @@ def build_ui():
 
                 clone_btn.click(
                     fn=create_voice_profile,
-                    inputs=[clone_audio, clone_name],
+                    inputs=[clone_audio, clone_name, clone_ref_text],
                     outputs=[clone_status, profile_list],
                 ).then(
                     fn=refresh_profiles,

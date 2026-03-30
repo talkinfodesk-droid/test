@@ -15,7 +15,8 @@ VOICES_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Qwen3-TTS 모델 설정
-MODEL_NAME = "Qwen/Qwen3-TTS"
+MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+MODEL_NAME_SMALL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 DEVICE = "cuda" if os.environ.get("FORCE_CPU") != "1" else "cpu"
 
 # 오디오 설정
@@ -30,6 +31,12 @@ LANGUAGES = {
     "English": "en",
     "中文": "zh",
     "日本語": "ja",
+    "Deutsch": "de",
+    "Français": "fr",
+    "Español": "es",
+    "Português": "pt",
+    "Русский": "ru",
+    "Italiano": "it",
 }
 
 # 출력 형식

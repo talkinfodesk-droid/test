@@ -1,10 +1,11 @@
+qwen-tts>=0.1.0
 torch>=2.0
 torchaudio>=2.0
 transformers>=4.40
 accelerate
-gradio>=4.0
-soundfile
-pydub
-pysrt
-numpy
+gradio>=5.0
+soundfile>=0.12
+pydub>=0.25
+pysrt>=1.1
+numpy>=1.24
 ffmpeg-python

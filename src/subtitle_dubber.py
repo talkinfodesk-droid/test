@@ -89,6 +89,7 @@ class SubtitleDubber:
         language="ko",
         speed=1.0,
         voice_profile_audio=None,
+        voice_profile_text=None,
         style_prompt=None,
         output_path=None,
         progress_callback=None,
@@ -100,6 +101,7 @@ class SubtitleDubber:
             language: 언어 코드
             speed: 재생 속도
             voice_profile_audio: 음성 클로닝용 참조 오디오 경로
+            voice_profile_text: 참조 오디오의 텍스트 전사
             style_prompt: 감정/스타일 프롬프트
             output_path: 출력 파일 경로
             progress_callback: 진행률 콜백 함수 (progress_ratio, message)
@@ -134,6 +136,7 @@ class SubtitleDubber:
                 speed=speed,
                 style_prompt=style_prompt,
                 reference_audio_path=voice_profile_audio,
+                reference_text=voice_profile_text,
                 output_path=temp_path,
             )
 

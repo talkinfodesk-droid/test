@@ -12,15 +12,17 @@ from config import VOICES_DIR
 class VoiceProfile:
     """저장된 음성 프로필"""
 
-    def __init__(self, name, audio_path, created_at=None):
+    def __init__(self, name, audio_path, reference_text=None, created_at=None):
         self.name = name
         self.audio_path = Path(audio_path)
+        self.reference_text = reference_text
         self.created_at = created_at or datetime.now().isoformat()
 
     def to_dict(self):
         return {
             "name": self.name,
             "audio_path": str(self.audio_path),
+            "reference_text": self.reference_text,
             "created_at": self.created_at,
         }
 
@@ -29,6 +31,7 @@ class VoiceProfile:
         return cls(
             name=data["name"],
             audio_path=data["audio_path"],
+            reference_text=data.get("reference_text"),
             created_at=data.get("created_at"),
         )
 
@@ -63,12 +66,13 @@ class VoiceCloner:
         with open(self.PROFILES_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    def create_profile(self, name, reference_audio_path):
+    def create_profile(self, name, reference_audio_path, reference_text=None):
         """참조 오디오로부터 음성 프로필을 생성합니다.
 
         Args:
             name: 프로필 이름
             reference_audio_path: 참조 오디오 파일 경로
+            reference_text: 참조 오디오의 텍스트 전사 (클로닝 품질 향상)
 
         Returns:
             VoiceProfile: 생성된 프로필
@@ -91,7 +95,9 @@ class VoiceCloner:
         sf.write(str(dest_path), data, sr)
 
         # 프로필 저장
-        profile = VoiceProfile(name=safe_name, audio_path=dest_path)
+        profile = VoiceProfile(
+            name=safe_name, audio_path=dest_path, reference_text=reference_text
+        )
         self.profiles[safe_name] = profile
         self._save_profiles()
 
@@ -124,6 +130,13 @@ class VoiceCloner:
         profile = self.profiles.get(name)
         if profile and profile.audio_path.exists():
             return str(profile.audio_path)
+        return None
+
+    def get_reference_text(self, name):
+        """프로필의 참조 텍스트를 반환합니다."""
+        profile = self.profiles.get(name)
+        if profile:
+            return profile.reference_text
         return None
 
     def get_audio_info(self, audio_path):
