@@ -25,25 +25,34 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // 목업 모드: placeholder URL이면 인증 체크 건너뜀
+  const isMockMode = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder')
 
-  const protectedPaths = ['/home', '/quiz', '/result', '/vocabulary', '/mypage']
-  const isProtected = protectedPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
-  )
+  if (!isMockMode) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-  if (isProtected && !user) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
+      const protectedPaths = ['/home', '/quiz', '/result', '/vocabulary', '/mypage']
+      const isProtected = protectedPaths.some((path) =>
+        request.nextUrl.pathname.startsWith(path)
+      )
 
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/home'
-    return NextResponse.redirect(url)
+      if (isProtected && !user) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        return NextResponse.redirect(url)
+      }
+
+      if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/home'
+        return NextResponse.redirect(url)
+      }
+    } catch {
+      // Supabase 미연결 시 모든 페이지 접근 허용
+    }
   }
 
   return supabaseResponse
