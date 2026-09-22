@@ -11,6 +11,7 @@ class MockData {
     return Exercise(
       name: 'Machine pulldown',
       muscleGroup: 'Back',
+      concentricFirst: true,
       sets: [
         WorkoutSet(
           index: 1,
@@ -56,6 +57,7 @@ class MockData {
       Exercise(
         name: 'Dumbbell row',
         muscleGroup: 'Back',
+        concentricFirst: true,
         sets: [
           WorkoutSet(index: 1, weightKg: 32, targetReps: 10),
           WorkoutSet(index: 2, weightKg: 32, targetReps: 10),

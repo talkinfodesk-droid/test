@@ -6,6 +6,7 @@ import '../state/live_workout_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/device_ring.dart';
 import '../widgets/rep_velocity_strip.dart';
+import '../widgets/sensor_picker_sheet.dart';
 import '../widgets/set_editor_sheet.dart';
 import '../widgets/set_row.dart';
 import '../widgets/set_tabs.dart';
@@ -201,9 +202,12 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.keyboard_arrow_up,
                 color: AppColors.textSecondary),
           ),
-          GestureDetector(
-            onTap: controller.toggleSensor,
-            child: DeviceRing(connected: controller.sensorConnected),
+          Tooltip(
+            message: 'Sensor',
+            child: GestureDetector(
+              onTap: () => showSensorPickerSheet(context, controller),
+              child: DeviceRing(connected: controller.sensorConnected),
+            ),
           ),
           const SizedBox(width: 8),
           _Pill(

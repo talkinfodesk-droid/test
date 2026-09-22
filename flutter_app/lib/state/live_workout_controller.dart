@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/workout_models.dart';
+import '../sensors/ble_rep_sensor.dart';
 import '../sensors/rep_sensor.dart';
 
 /// Drives the live tracking screen: session clock, per-set clock, the rep
@@ -14,7 +15,7 @@ class LiveWorkoutController extends ChangeNotifier {
     int? initialSetIndex,
     Duration initialElapsed = const Duration(minutes: 2, seconds: 45),
   })  : _ownsSensor = sensor == null,
-        sensor = sensor ?? SimulatedRepSensor(),
+        _sensor = sensor ?? SimulatedRepSensor(),
         _elapsed = initialElapsed,
         _currentSet = initialSetIndex ??
             exercise.sets
@@ -27,16 +28,36 @@ class LiveWorkoutController extends ChangeNotifier {
       }
       notifyListeners();
     });
-    _repSub = this.sensor.reps.listen(_onRep);
-    _connSub = this.sensor.connectionState.listen((_) {
-      if (!this.sensor.isConnected) _stopCapture();
-      notifyListeners();
-    });
+    _subscribe();
   }
 
   final Exercise exercise;
-  final RepSensor sensor;
-  final bool _ownsSensor;
+  RepSensor _sensor;
+  bool _ownsSensor;
+
+  RepSensor get sensor => _sensor;
+
+  /// Replace the rep source (e.g. simulated -> paired BLE board). The old
+  /// sensor is disposed only if this controller created it.
+  Future<void> setSensor(RepSensor next, {bool owns = true}) async {
+    if (identical(next, _sensor)) return;
+    _stopCapture();
+    await _repSub?.cancel();
+    await _connSub?.cancel();
+    if (_ownsSensor) await _sensor.dispose();
+    _sensor = next;
+    _ownsSensor = owns;
+    _subscribe();
+    notifyListeners();
+  }
+
+  void _subscribe() {
+    _repSub = _sensor.reps.listen(_onRep);
+    _connSub = _sensor.connectionState.listen((_) {
+      if (!_sensor.isConnected) _stopCapture();
+      notifyListeners();
+    });
+  }
 
   Timer? _sessionTimer;
   StreamSubscription<RepEvent>? _repSub;
@@ -130,6 +151,8 @@ class LiveWorkoutController extends ChangeNotifier {
     _capturing = true;
     _setStartedAt = DateTime.now();
     _setElapsed = Duration.zero;
+    final s = sensor;
+    if (s is BleRepSensor) s.concentricFirst = exercise.concentricFirst;
     sensor.startSet(
       targetReps: currentSet.targetReps - currentSet.reps,
       weightKg: currentSet.weightKg,

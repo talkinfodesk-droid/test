@@ -63,11 +63,16 @@ class Exercise {
     required this.name,
     required this.sets,
     this.muscleGroup = '',
+    this.concentricFirst = false,
   });
 
   final String name;
   final String muscleGroup;
   final List<WorkoutSet> sets;
+
+  /// True when the working (concentric) phase moves the handle down first,
+  /// e.g. pulldowns and rows. Bench / squat / press are false.
+  final bool concentricFirst;
 
   int get setCount => sets.length;
 
