@@ -31,15 +31,30 @@ struct Sim {
       feed(a);
     }
   }
+  // Mounting orientation: unit vector of "up" in the board frame.
+  float ux = 0.3f, uy = -0.2f, uz = sqrtf(1 - 0.3f * 0.3f - 0.2f * 0.2f);
+
   void feed(float aVerticalMs2) {
-    // Board mounted tilted: gravity on a mix of axes, motion along gravity.
-    const float ux = 0.3f, uy = -0.2f, uz = sqrtf(1 - ux * ux - uy * uy);
     const float total = 1.0f + aVerticalMs2 / G;  // g
     RepResult r;
     if (det.update(total * ux, total * uy, total * uz, DT, &r)) reps.push_back(r);
     t += DT;
   }
 };
+
+// Bench-press set with the board mounted along the given "up" vector.
+static size_t repsForMounting(float ux, float uy, float uz) {
+  Sim s;
+  s.ux = ux; s.uy = uy; s.uz = uz;
+  s.still(1.0f);
+  s.det.startSet(false);
+  for (int i = 0; i < 3; i++) {
+    s.phase(0.6f, 0.8f, -1);
+    s.phase(0.6f, 0.8f, +1);
+    s.still(0.5f);
+  }
+  return s.reps.size();
+}
 
 static int failures = 0;
 #define CHECK(cond, msg)                                       \
@@ -98,6 +113,9 @@ int main() {
     s.phase(0.6f, 0.8f, -1); s.phase(0.6f, 0.8f, +1);
     CHECK(s.reps.empty(), "stopped set: movement ignored");
   }
+  CHECK(repsForMounting(1, 0, 0) == 3, "mounting: x-axis up still counts reps");
+  CHECK(repsForMounting(0, 0, -1) == 3, "mounting: upside down still counts reps");
+  CHECK(repsForMounting(0, 0.7071f, -0.7071f) == 3, "mounting: 45-degree tilt still counts");
   printf(failures ? "\n%d FAILED\n" : "\nALL PASSED\n", failures);
   return failures ? 1 : 0;
 }

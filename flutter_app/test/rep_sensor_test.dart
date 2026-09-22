@@ -1,6 +1,7 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gpath_tracker/data/mock_data.dart';
+import 'package:gpath_tracker/models/workout_models.dart';
 import 'package:gpath_tracker/sensors/rep_sensor.dart';
 import 'package:gpath_tracker/state/live_workout_controller.dart';
 
@@ -119,6 +120,15 @@ void main() {
       c.startCapture();
       expect(c.isCapturing, isFalse);
       expect(c.exercise.sets[2].completed, isTrue);
+    });
+
+    test('an exercise with no sets gets one instead of crashing', () {
+      final c = LiveWorkoutController(
+        exercise: Exercise(name: 'empty', sets: []),
+      );
+      addTearDown(c.dispose);
+      expect(c.exercise.sets.length, 1);
+      expect(c.currentSetIndex, 0);
     });
 
     test('the last remaining set cannot be removed', () {

@@ -10,6 +10,7 @@ import '../widgets/sensor_picker_sheet.dart';
 import '../widgets/set_editor_sheet.dart';
 import '../widgets/set_row.dart';
 import '../widgets/set_tabs.dart';
+import '../widgets/sheet_handle.dart';
 import '../widgets/stat_tile.dart';
 import '../widgets/velocity_bar_chart.dart';
 
@@ -326,16 +327,7 @@ class _LiveSheet extends StatelessWidget {
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
         children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.textMuted,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetHandle(),
           const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,7 +406,7 @@ class _LiveSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: StatTile(
-                  value: _fmtKg(c.totalVolumeKg),
+                  value: formatKg(c.totalVolumeKg),
                   unit: 'kg',
                   label: 'Total Volume',
                 ),
@@ -452,9 +444,6 @@ class _LiveSheet extends StatelessWidget {
       ),
     );
   }
-
-  static String _fmtKg(double kg) =>
-      kg == kg.roundToDouble() ? kg.toInt().toString() : kg.toStringAsFixed(1);
 }
 
 class _CompleteButton extends StatelessWidget {

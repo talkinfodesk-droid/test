@@ -8,6 +8,7 @@ import '../sensors/rep_sensor.dart';
 import '../state/live_workout_controller.dart';
 import '../state/sensor_prefs.dart';
 import '../theme/app_theme.dart';
+import 'sheet_handle.dart';
 
 /// Pick the rep source for the live screen: the built-in simulator or a
 /// nearby ESP32-S3 bar sensor found over BLE.
@@ -155,16 +156,7 @@ class _SensorPickerSheetState extends State<_SensorPickerSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.textMuted,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetHandle(),
           const SizedBox(height: 16),
           Row(
             children: [

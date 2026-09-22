@@ -17,10 +17,12 @@ class LiveWorkoutController extends ChangeNotifier {
   })  : _ownsSensor = sensor == null,
         _sensor = sensor ?? SimulatedRepSensor(),
         _elapsed = initialElapsed,
-        _currentSet = initialSetIndex ??
-            exercise.sets
-                .indexWhere((s) => !s.completed)
-                .clamp(0, exercise.sets.length - 1) {
+        _currentSet = 0 {
+    // An exercise always has at least one set to track.
+    if (exercise.sets.isEmpty) exercise.addSet();
+    _currentSet =
+        (initialSetIndex ?? exercise.sets.indexWhere((s) => !s.completed))
+            .clamp(0, exercise.sets.length - 1);
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _elapsed += const Duration(seconds: 1);
       if (_setStartedAt != null) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,7 +20,7 @@ void main() {
   );
   final repository = WorkoutRepository();
   runApp(GPathApp(repository: repository));
-  repository.load();
+  unawaited(repository.load());
 }
 
 class GPathApp extends StatelessWidget {

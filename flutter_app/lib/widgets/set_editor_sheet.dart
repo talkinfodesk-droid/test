@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../models/workout_models.dart';
 import '../theme/app_theme.dart';
+import 'sheet_handle.dart';
 
 /// Result of editing a set: new weight / reps, or a delete request.
 class SetEdit {
@@ -47,10 +48,7 @@ class _SetEditorSheetState extends State<_SetEditorSheet> {
   @override
   void initState() {
     super.initState();
-    final kg = widget.set.weightKg;
-    _weight = TextEditingController(
-      text: kg == kg.roundToDouble() ? kg.toInt().toString() : kg.toString(),
-    );
+    _weight = TextEditingController(text: formatKg(widget.set.weightKg));
     _reps = TextEditingController(text: widget.set.targetReps.toString());
   }
 
@@ -82,16 +80,7 @@ class _SetEditorSheetState extends State<_SetEditorSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.textMuted,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetHandle(),
           const SizedBox(height: 16),
           Text('Edit set ${widget.set.index}',
               style: Theme.of(context).textTheme.titleLarge),

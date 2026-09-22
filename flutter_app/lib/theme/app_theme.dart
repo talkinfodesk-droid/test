@@ -23,6 +23,7 @@ class AppColors {
   static const Color red = Color(0xFFE5484D);
   static const Color orange = Color(0xFFF5A524);
   static const Color yellow = Color(0xFFE9D24B);
+  static const Color avatarBackground = Color(0xFF3B2A5C);
 }
 
 class AppTheme {

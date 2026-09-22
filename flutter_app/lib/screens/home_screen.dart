@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../data/mock_data.dart';
 import '../state/app_scope.dart';
 import '../theme/app_theme.dart';
+import '../models/workout_models.dart';
 import '../widgets/device_ring.dart';
+import '../widgets/user_avatar.dart';
 import 'live_workout_screen.dart';
 
 /// Home tab: greeting, sensor status, a "continue workout" card that opens
@@ -16,6 +18,7 @@ class HomeScreen extends StatelessWidget {
     final repo = AppScope.of(context);
     final sessions = repo.sessions;
     final last = repo.latest;
+    final inProgress = MockData.machinePulldown();
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -23,11 +26,7 @@ class HomeScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                const CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Color(0xFF3B2A5C),
-                  child: Icon(Icons.person, color: AppColors.purple),
-                ),
+                const UserAvatar(radius: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -45,10 +44,10 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             _ContinueCard(
+              exercise: inProgress,
               onStart: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) =>
-                      LiveWorkoutScreen(exercise: MockData.machinePulldown()),
+                  builder: (_) => LiveWorkoutScreen(exercise: inProgress),
                 ),
               ),
             ),
@@ -88,8 +87,9 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _ContinueCard extends StatelessWidget {
-  const _ContinueCard({required this.onStart});
+  const _ContinueCard({required this.exercise, required this.onStart});
 
+  final Exercise exercise;
   final VoidCallback onStart;
 
   @override
@@ -110,11 +110,13 @@ class _ContinueCard extends StatelessWidget {
         children: [
           Text('In progress', style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 6),
-          Text('Machine pulldown',
-              style: Theme.of(context).textTheme.titleLarge),
+          Text(exercise.name, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
-          Text('2 of 3 sets done · 60 kg',
-              style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            '${exercise.sets.where((s) => s.completed).length} of ${exercise.setCount} sets done'
+            ' · ${formatKg(exercise.sets.first.weightKg)} kg',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 18),
           FilledButton.icon(
             style: FilledButton.styleFrom(

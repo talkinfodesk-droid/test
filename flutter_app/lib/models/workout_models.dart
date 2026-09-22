@@ -1,5 +1,20 @@
 import 'dart:math' as math;
 
+/// "60" for whole kilos, "62.5" otherwise.
+String formatKg(double kg) =>
+    kg == kg.roundToDouble() ? kg.toInt().toString() : kg.toStringAsFixed(1);
+
+/// Arithmetic mean; 0 for an empty list.
+double meanOf(Iterable<double> xs) {
+  var n = 0;
+  var sum = 0.0;
+  for (final x in xs) {
+    sum += x;
+    n++;
+  }
+  return n == 0 ? 0 : sum / n;
+}
+
 /// One planned/performed set of an exercise.
 class WorkoutSet {
   WorkoutSet({
@@ -23,11 +38,7 @@ class WorkoutSet {
 
   double get volumeKg => weightKg * reps;
 
-  double get meanVelocity {
-    if (repVelocities.isEmpty) return 0;
-    final sum = repVelocities.fold<double>(0, (a, b) => a + b);
-    return sum / repVelocities.length;
-  }
+  double get meanVelocity => meanOf(repVelocities);
 
   /// "GPE" is the app's effort score for a set. We derive it from the
   /// velocity loss between the fastest and the last rep: a bigger drop means
@@ -143,15 +154,12 @@ class TrainingSession {
         for (final v in s.repVelocities) s.weightKg * _g * v,
     ];
 
-    double mean(List<double> xs) =>
-        xs.fold<double>(0, (a, b) => a + b) / xs.length;
-
     return TrainingSession(
       date: date ?? DateTime.now(),
-      gpeMean: mean(gpes),
+      gpeMean: meanOf(gpes),
       gpeMin: gpes.reduce(math.min),
       gpeMax: gpes.reduce(math.max),
-      powerMean: mean(powers),
+      powerMean: meanOf(powers),
       powerMin: powers.reduce(math.min),
       powerMax: powers.reduce(math.max),
     );

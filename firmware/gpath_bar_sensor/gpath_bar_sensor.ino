@@ -50,6 +50,17 @@ struct SetState {
   bool concentricFirst = false;
 } setState;
 
+// BLE callbacks run on the Bluetooth task, loop() on the Arduino task. The
+// callbacks only post a command here; loop() applies it, so `detector` and
+// `setState` are touched from one task only.
+struct PendingCommand {
+  volatile bool ready = false;
+  uint8_t cmd = 0;
+  uint8_t targetReps = 0;
+  uint16_t weightX10 = 0;
+  bool concentricFirst = false;
+} pending;
+
 float lastMeanVel = 0;
 uint32_t lastSampleUs = 0;
 uint32_t lastDrawMs = 0;
@@ -63,9 +74,8 @@ class ServerCallbacks : public BLEServerCallbacks {
   }
   void onDisconnect(BLEServer* s) override {
     bleConnected = false;
-    setState.active = false;
-    detector.stopSet();
-    dirty = true;
+    pending.cmd = CMD_STOP;
+    pending.ready = true;
     s->startAdvertising();
   }
 };
@@ -75,26 +85,38 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
     String v = c->getValue();
     if (v.length() == 0) return;
     const uint8_t* d = (const uint8_t*)v.c_str();
-    switch (d[0]) {
-      case CMD_START:
-        setState.active = true;
-        setState.targetReps = v.length() > 1 ? d[1] : 0;
-        setState.weightKg = v.length() > 3 ? (d[2] | (d[3] << 8)) / 10.0f : 0;
-        setState.concentricFirst = v.length() > 4 ? d[4] != 0 : false;
-        detector.startSet(setState.concentricFirst);
-        lastMeanVel = 0;
-        break;
-      case CMD_STOP:
-        setState.active = false;
-        detector.stopSet();
-        break;
-      case CMD_TARE:
-        detector.reset();
-        break;
-    }
-    dirty = true;
+    if (pending.ready) return;  // previous command not applied yet; drop
+    pending.cmd = d[0];
+    pending.targetReps = v.length() > 1 ? d[1] : 0;
+    pending.weightX10 = v.length() > 3 ? (uint16_t)(d[2] | (d[3] << 8)) : 0;
+    pending.concentricFirst = v.length() > 4 ? d[4] != 0 : false;
+    pending.ready = true;
   }
 };
+
+// Runs on the loop() task.
+static void applyPendingCommand() {
+  if (!pending.ready) return;
+  switch (pending.cmd) {
+    case CMD_START:
+      setState.active = true;
+      setState.targetReps = pending.targetReps;
+      setState.weightKg = pending.weightX10 / 10.0f;
+      setState.concentricFirst = pending.concentricFirst;
+      detector.startSet(setState.concentricFirst);
+      lastMeanVel = 0;
+      break;
+    case CMD_STOP:
+      setState.active = false;
+      detector.stopSet();
+      break;
+    case CMD_TARE:
+      detector.reset();
+      break;
+  }
+  pending.ready = false;
+  dirty = true;
+}
 
 // ---- helpers -------------------------------------------------------------
 static void notifyRep(const RepResult& r) {
@@ -209,6 +231,8 @@ void setup() {
 }
 
 void loop() {
+  applyPendingCommand();
+
   // BOOT button: re-zero while the bar is still.
   static uint32_t btnDownMs = 0;
   if (digitalRead(BTN_BOOT) == LOW) {

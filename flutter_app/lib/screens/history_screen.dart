@@ -4,6 +4,8 @@ import '../data/mock_data.dart';
 import '../models/workout_models.dart';
 import '../state/app_scope.dart';
 import '../theme/app_theme.dart';
+import '../theme/zone_colors.dart';
+import '../widgets/user_avatar.dart';
 import '../widgets/gpe_zone_chart.dart';
 
 /// History tab: "GPE Per Training" and "Total Power Per Training" cards.
@@ -55,11 +57,7 @@ class _HistoryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const CircleAvatar(
-          radius: 18,
-          backgroundColor: Color(0xFF3B2A5C),
-          child: Icon(Icons.person, size: 20, color: AppColors.purple),
-        ),
+        const UserAvatar(),
         const SizedBox(width: 10),
         Text(MockData.userName, style: Theme.of(context).textTheme.titleMedium),
         const Spacer(),
@@ -178,7 +176,7 @@ class _SessionList extends StatelessWidget {
                 ),
                 _Chip(
                   label: GpeZone.forValue(s.gpeMean).label,
-                  color: _zoneColor(GpeZone.forValue(s.gpeMean)),
+                  color: GpeZone.forValue(s.gpeMean).color,
                 ),
                 const SizedBox(width: 10),
                 Text('${s.powerMean.round()} W',
@@ -189,13 +187,6 @@ class _SessionList extends StatelessWidget {
       ],
     );
   }
-
-  static Color _zoneColor(GpeZone z) => switch (z) {
-        GpeZone.tooEasy || GpeZone.overdo => AppColors.red,
-        GpeZone.light => AppColors.yellow,
-        GpeZone.optimal => AppColors.green,
-        GpeZone.heavy => AppColors.orange,
-      };
 }
 
 class _Chip extends StatelessWidget {

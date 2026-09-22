@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
 import '../theme/app_theme.dart';
+import '../theme/zone_colors.dart';
 
 /// "GPE Per Training": horizontal effort bands (Too easy -> Overdo), a
 /// min/max candle per session and a dot on the session mean, joined by a line.
@@ -30,14 +31,6 @@ class _GpePainter extends CustomPainter {
   static const double _labelWidth = 56;
   static const double _axisHeight = 34;
 
-  static Color zoneColor(GpeZone zone) => switch (zone) {
-        GpeZone.tooEasy => AppColors.red,
-        GpeZone.light => AppColors.yellow,
-        GpeZone.optimal => AppColors.green,
-        GpeZone.heavy => AppColors.orange,
-        GpeZone.overdo => AppColors.red,
-      };
-
   @override
   void paint(Canvas canvas, Size size) {
     final plot = Rect.fromLTWH(
@@ -53,7 +46,7 @@ class _GpePainter extends CustomPainter {
     for (final zone in GpeZone.values) {
       final top = yFor(zone.to);
       final bottom = yFor(zone.from);
-      final color = zoneColor(zone);
+      final color = zone.color;
       canvas.drawRect(
         Rect.fromLTRB(plot.left, top, plot.right, bottom),
         Paint()
@@ -88,7 +81,7 @@ class _GpePainter extends CustomPainter {
     for (var i = 0; i < sessions.length; i++) {
       final s = sessions[i];
       final x = xFor(i);
-      final color = zoneColor(GpeZone.forValue(s.gpeMean));
+      final color = GpeZone.forValue(s.gpeMean).color;
       canvas.drawLine(
         Offset(x, yFor(s.gpeMin)),
         Offset(x, yFor(s.gpeMax)),
@@ -121,7 +114,7 @@ class _GpePainter extends CustomPainter {
     for (var i = 0; i < sessions.length; i++) {
       final s = sessions[i];
       final p = Offset(xFor(i), yFor(s.gpeMean));
-      final color = zoneColor(GpeZone.forValue(s.gpeMean));
+      final color = GpeZone.forValue(s.gpeMean).color;
       canvas.drawCircle(p, 4.5, Paint()..color = color);
       canvas.drawCircle(
         p,

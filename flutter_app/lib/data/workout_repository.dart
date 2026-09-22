@@ -27,7 +27,16 @@ class WorkoutRepository extends ChangeNotifier {
   TrainingSession? get latest => _sessions.isEmpty ? null : _sessions.last;
 
   Future<void> load() async {
-    _prefs ??= await SharedPreferences.getInstance();
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+    } catch (e) {
+      debugPrint(
+          'WorkoutRepository: storage unavailable, using in-memory ($e)');
+      _sessions = MockData.sessions();
+      _loaded = true;
+      notifyListeners();
+      return;
+    }
     final raw = _prefs!.getString(_sessionsKey);
     List<TrainingSession>? stored;
     if (raw != null) {
@@ -73,8 +82,9 @@ class WorkoutRepository extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    _prefs ??= await SharedPreferences.getInstance();
-    await _prefs!.setString(
+    final prefs = _prefs;
+    if (prefs == null) return; // in-memory fallback
+    await prefs.setString(
       _sessionsKey,
       jsonEncode(_sessions.map((s) => s.toJson()).toList()),
     );

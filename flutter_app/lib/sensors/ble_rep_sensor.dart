@@ -79,6 +79,10 @@ class BleRepSensor implements RepSensor {
       repChar.uuid,
     );
 
+    final state = await UniversalBle.getConnectionState(deviceId);
+    if (state != BleConnectionState.connected) {
+      throw StateError('Sensor dropped the link during setup');
+    }
     _onState(true);
   }
 

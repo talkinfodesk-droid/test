@@ -87,7 +87,7 @@ class SetRow extends StatelessWidget {
                 Expanded(
                   child: Center(
                     child: Text(
-                      _fmtWeight(set.weightKg),
+                      formatKg(set.weightKg),
                       style: TextStyle(fontSize: 16, color: fg),
                     ),
                   ),
@@ -133,9 +133,6 @@ class SetRow extends StatelessWidget {
       ),
     );
   }
-
-  static String _fmtWeight(double kg) =>
-      kg == kg.roundToDouble() ? kg.toInt().toString() : kg.toStringAsFixed(1);
 }
 
 class _Times extends StatelessWidget {

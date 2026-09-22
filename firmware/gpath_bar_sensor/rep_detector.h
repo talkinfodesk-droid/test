@@ -35,13 +35,14 @@ class RepDetector {
     float minPhaseMs = 150;          // shorter phases are noise
     float minRom = 0.06f;            // m, shorter phases are noise
     float minPeakVel = 0.08f;        // m/s
+    float statVelFloor = 0.03f;      // m/s, samples below this are not averaged
   };
 
   RepDetector() : cfg_(Config()) { reset(); }
   explicit RepDetector(const Config& c) : cfg_(c) { reset(); }
 
   void reset() {
-    gx_ = 0; gy_ = 0; gz_ = 1;   // assume z up until we learn better
+    gx_ = 0; gy_ = 0; gz_ = 1;   // placeholder until the first rest window
     v_ = 0; disp_ = 0; velSum_ = 0; velN_ = 0; peak_ = 0;
     phaseMs_ = 0; restMs_ = 0; timeMs_ = 0; reps_ = 0;
     phaseDir_ = 0; armed_ = false; concentricUp_ = true;
@@ -77,18 +78,24 @@ class RepDetector {
     const float lin = along - 1.0f;                    // g, gravity removed
     const float aLin = lin * cfg_.g;                   // m/s^2
 
-    // Rest detection + gravity learning.
-    const bool quiet = fabsf(lin) < cfg_.restAccelThresh;
+    // Rest detection + gravity learning. Until gravity is known the test
+    // uses |a| ~ 1 g, which holds for any mounting orientation.
+    const float amag = sqrtf(ax * ax + ay * ay + az * az);
+    const bool quiet = calibrated_ ? fabsf(lin) < cfg_.restAccelThresh
+                                   : fabsf(amag - 1.0f) < cfg_.restAccelThresh;
     if (quiet) {
       restMs_ += dtMs;
-      if (restMs_ >= cfg_.restHoldMs) {
+      if (restMs_ >= (float)cfg_.restHoldMs) {
         // Update gravity estimate (fast on first lock, slow afterwards).
-        const float a = calibrated_ ? cfg_.gravityAlpha : 0.5f;
-        gx_ += (ax - gx_) * a;
-        gy_ += (ay - gy_) * a;
-        gz_ += (az - gz_) * a;
-        calibrated_ = true;
-        if (fabsf(v_) < cfg_.restVelThresh || restMs_ >= cfg_.restHoldMs * 3) {
+        if (!calibrated_) {
+          gx_ = ax; gy_ = ay; gz_ = az;  // lock onto the resting vector
+          calibrated_ = true;
+        } else {
+          gx_ += (ax - gx_) * cfg_.gravityAlpha;
+          gy_ += (ay - gy_) * cfg_.gravityAlpha;
+          gz_ += (az - gz_) * cfg_.gravityAlpha;
+        }
+        if (fabsf(v_) < cfg_.restVelThresh || restMs_ >= (float)cfg_.restHoldMs * 3.0f) {
           const bool rep = endPhase(out);
           v_ = 0;
           return rep;
@@ -114,8 +121,12 @@ class RepDetector {
       if (phaseDir_ == 0) phaseDir_ = dir;
       const float vAbs = fabsf(v_);
       disp_ += 0.5f * (fabsf(vPrev) + vAbs) * dtSec;
-      velSum_ += vAbs;
-      velN_++;
+      // The rest-hold tail (bar already still, phase not yet closed) would
+      // drag the mean down, so only moving samples count towards it.
+      if (vAbs >= cfg_.statVelFloor) {
+        velSum_ += vAbs;
+        velN_++;
+      }
       if (vAbs > peak_) peak_ = vAbs;
       phaseMs_ += dtMs;
     }
@@ -133,7 +144,7 @@ class RepDetector {
       if (isConcentric && out != nullptr) {
         reps_++;
         out->index = reps_;
-        out->meanVelocity = velSum_ / velN_;
+        out->meanVelocity = velSum_ / (float)velN_;
         out->peakVelocity = peak_;
         out->rangeOfMotion = disp_;
         out->sinceStartMs = (uint32_t)timeMs_;
