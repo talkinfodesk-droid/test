@@ -87,6 +87,40 @@ void main() {
       expect(c.currentSetIndex, 2);
     });
 
+    test('removing a set before the live one keeps the live set selected', () {
+      final c = LiveWorkoutController(
+        exercise: MockData.machinePulldown(),
+        initialSetIndex: 1,
+      );
+      addTearDown(c.dispose);
+      final live = c.currentSet;
+      c.removeSet(0);
+      expect(c.currentSetIndex, 0);
+      expect(c.currentSet.repVelocities, live.repVelocities);
+    });
+
+    test('removing the live set moves to the next incomplete set', () {
+      final c = LiveWorkoutController(exercise: MockData.machinePulldown());
+      addTearDown(c.dispose);
+      c.addSet();
+      expect(c.currentSetIndex, 2);
+      c.removeSet(2);
+      expect(c.currentSetIndex, 2);
+      expect(c.currentSet.completed, isFalse);
+      expect(c.currentSet.index, 3);
+    });
+
+    test('lowering the target below logged reps completes on start', () {
+      final c = LiveWorkoutController(exercise: MockData.machinePulldown());
+      addTearDown(c.dispose);
+      c.addRep();
+      c.addRep();
+      c.updateSet(2, targetReps: 2);
+      c.startCapture();
+      expect(c.isCapturing, isFalse);
+      expect(c.exercise.sets[2].completed, isTrue);
+    });
+
     test('the last remaining set cannot be removed', () {
       final c = LiveWorkoutController(exercise: MockData.machinePulldown());
       addTearDown(c.dispose);

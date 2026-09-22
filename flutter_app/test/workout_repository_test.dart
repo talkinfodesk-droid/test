@@ -56,6 +56,40 @@ void main() {
     expect(await repo.saveExercise(empty), isNull);
   });
 
+  test('unreadable stored data falls back to the demo seed', () async {
+    SharedPreferences.setMockInitialValues({'sessions.v1': '{not json'});
+    final repo =
+        WorkoutRepository(prefs: await SharedPreferences.getInstance());
+    await repo.load();
+    expect(repo.isLoaded, isTrue);
+    expect(repo.sessions.length, MockData.sessions().length);
+  });
+
+  test('single-rep sets do not drag GPE down to zero', () {
+    final exercise = Exercise(
+      name: 'x',
+      sets: [
+        WorkoutSet(
+          index: 1,
+          weightKg: 60,
+          targetReps: 5,
+          repVelocities: [0.7, 0.6, 0.5],
+          completed: true,
+        ),
+        WorkoutSet(
+          index: 2,
+          weightKg: 60,
+          targetReps: 1,
+          repVelocities: [0.6],
+          completed: true,
+        ),
+      ],
+    );
+    final session = TrainingSession.fromExercise(exercise)!;
+    expect(session.gpeMin, greaterThan(0));
+    expect(session.gpeMean, exercise.sets[0].gpe);
+  });
+
   test('TrainingSession json round-trips', () {
     final s = MockData.sessions().first;
     final back = TrainingSession.fromJson(s.toJson());

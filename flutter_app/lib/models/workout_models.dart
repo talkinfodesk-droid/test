@@ -129,7 +129,10 @@ class TrainingSession {
     final done = exercise.sets.where((s) => s.completed && s.reps > 0).toList();
     if (done.isEmpty) return null;
 
-    final gpes = done.map((s) => s.gpe ?? 0).toList();
+    // Sets with a single rep have no velocity loss to score; leave them out
+    // instead of counting them as an effort of 0.
+    final gpes = done.map((s) => s.gpe).whereType<double>().toList();
+    if (gpes.isEmpty) gpes.add(0);
     final powers = <double>[
       for (final s in done)
         for (final v in s.repVelocities) s.weightKg * _g * v,

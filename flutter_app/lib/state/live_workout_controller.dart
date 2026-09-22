@@ -94,6 +94,14 @@ class LiveWorkoutController extends ChangeNotifier {
   void removeSet(int index) {
     if (!canRemoveSet(index)) return;
     exercise.removeSetAt(index);
+    // Keep pointing at the same set when one before it disappears; if the
+    // live set itself was removed, fall back to the next incomplete one.
+    if (index < _currentSet) {
+      _currentSet -= 1;
+    } else if (index == _currentSet) {
+      final next = exercise.sets.indexWhere((s) => !s.completed);
+      _currentSet = next == -1 ? exercise.sets.length - 1 : next;
+    }
     if (_currentSet >= exercise.sets.length) {
       _currentSet = exercise.sets.length - 1;
     }
@@ -114,6 +122,11 @@ class LiveWorkoutController extends ChangeNotifier {
   /// Arm the sensor for the current set.
   void startCapture() {
     if (currentSet.completed || !sensor.isConnected || _capturing) return;
+    if (currentSet.reps >= currentSet.targetReps) {
+      // Target was lowered below what is already logged.
+      completeCurrentSet();
+      return;
+    }
     _capturing = true;
     _setStartedAt = DateTime.now();
     _setElapsed = Duration.zero;

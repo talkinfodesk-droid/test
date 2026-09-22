@@ -29,15 +29,22 @@ class WorkoutRepository extends ChangeNotifier {
   Future<void> load() async {
     _prefs ??= await SharedPreferences.getInstance();
     final raw = _prefs!.getString(_sessionsKey);
-    if (raw == null) {
+    List<TrainingSession>? stored;
+    if (raw != null) {
+      try {
+        stored = (jsonDecode(raw) as List<dynamic>)
+            .map((e) => TrainingSession.fromJson(e as Map<String, dynamic>))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+      } catch (e) {
+        debugPrint('WorkoutRepository: discarding unreadable sessions ($e)');
+      }
+    }
+    if (stored == null) {
       _sessions = MockData.sessions();
       await _persist();
     } else {
-      final list = (jsonDecode(raw) as List<dynamic>)
-          .map((e) => TrainingSession.fromJson(e as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) => a.date.compareTo(b.date));
-      _sessions = list;
+      _sessions = stored;
     }
     _loaded = true;
     notifyListeners();

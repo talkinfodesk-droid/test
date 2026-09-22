@@ -53,10 +53,9 @@ void main() {
     await tester.tap(find.text('Continue workout'));
     await tester.pumpAndSettle();
 
-    // Log the live set manually, then finish via the menu.
+    // Log one rep on the live set and finish without pressing the check:
+    // the live reps must still be saved.
     await tester.tap(find.byTooltip('Log rep'));
-    await tester.pump();
-    await tester.tap(find.byIcon(Icons.check).last);
     await tester.pump();
 
     await tester.tap(find.byIcon(Icons.more_horiz));

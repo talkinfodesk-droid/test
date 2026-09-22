@@ -61,6 +61,11 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
+    // Reps logged on the live set count too.
+    if (!c.currentSet.completed && c.currentSet.reps > 0) {
+      c.completeCurrentSet();
+    }
+
     if (c.completedSets == 0) {
       final leave = await showDialog<bool>(
         context: context,

@@ -57,15 +57,18 @@ class RepVelocityStrip extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      i < velocities.length
-                          ? velocities[i].toStringAsFixed(2)
-                          : '0.0',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: i < velocities.length
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        i < velocities.length
+                            ? velocities[i].toStringAsFixed(2)
+                            : '0.0',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: i < velocities.length
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                        ),
                       ),
                     ),
                   ],
