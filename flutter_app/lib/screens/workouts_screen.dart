@@ -6,12 +6,18 @@ import '../theme/app_theme.dart';
 import 'live_workout_screen.dart';
 
 /// Workouts tab: pick an exercise template and start tracking it live.
-class WorkoutsScreen extends StatelessWidget {
+class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
 
   @override
+  State<WorkoutsScreen> createState() => _WorkoutsScreenState();
+}
+
+class _WorkoutsScreenState extends State<WorkoutsScreen> {
+  late final List<Exercise> templates = MockData.workoutTemplates();
+
+  @override
   Widget build(BuildContext context) {
-    final templates = MockData.workoutTemplates();
     return Scaffold(
       appBar: AppBar(title: const Text('Workouts')),
       body: ListView.separated(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/mock_data.dart';
 import '../models/workout_models.dart';
+import '../state/app_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gpe_zone_chart.dart';
 
@@ -11,7 +12,11 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = MockData.sessions();
+    final repo = AppScope.of(context);
+    final sessions = repo.sessions;
+    if (!repo.isLoaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
       body: SafeArea(
         child: ListView(

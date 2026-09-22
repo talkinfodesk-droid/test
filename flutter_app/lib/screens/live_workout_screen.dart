@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
+import '../state/app_scope.dart';
 import '../state/live_workout_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/device_ring.dart';
 import '../widgets/rep_velocity_strip.dart';
+import '../widgets/set_editor_sheet.dart';
 import '../widgets/set_row.dart';
 import '../widgets/set_tabs.dart';
 import '../widgets/stat_tile.dart';
@@ -37,6 +39,66 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     super.dispose();
   }
 
+  Future<void> _editSet(int index) async {
+    final c = _controller;
+    final edit = await showSetEditorSheet(
+      context,
+      set: c.exercise.sets[index],
+      canDelete: c.canRemoveSet(index),
+    );
+    if (edit == null) return;
+    if (edit.delete) {
+      c.removeSet(index);
+    } else {
+      c.updateSet(index, weightKg: edit.weightKg, targetReps: edit.targetReps);
+    }
+  }
+
+  /// Persist the session and leave the screen.
+  Future<void> _finishWorkout() async {
+    final c = _controller;
+    final repo = AppScope.of(context);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (c.completedSets == 0) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: const Text('Nothing logged yet'),
+          content: const Text('Leave without saving this workout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Stay'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Leave'),
+            ),
+          ],
+        ),
+      );
+      if (leave == true) navigator.pop();
+      return;
+    }
+
+    final session = await repo.saveExercise(c.exercise);
+    if (!mounted) return;
+    if (session != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Saved: ${c.completedSets} sets, GPE ${session.gpeMean.toStringAsFixed(1)}, '
+            '${session.powerMean.round()} W',
+          ),
+        ),
+      );
+    }
+    navigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -52,15 +114,29 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TopBar(controller: c),
-                    _ExerciseHeader(exercise: exercise),
+                    _TopBar(controller: c, onFinish: _finishWorkout),
+                    _ExerciseHeader(
+                      exercise: exercise,
+                      onEdit: () => _editSet(c.currentSetIndex),
+                    ),
                     const SetTableHeader(),
-                    for (var i = 0; i < exercise.sets.length; i++)
-                      SetRow(
-                        set: exercise.sets[i],
-                        isActive: i == c.currentSetIndex,
-                        onTap: () => c.selectSet(i),
+                    Expanded(
+                      child: ListView(
+                        padding: EdgeInsets.zero,
+                        children: [
+                          for (var i = 0; i < exercise.sets.length; i++)
+                            SetRow(
+                              set: exercise.sets[i],
+                              isActive: i == c.currentSetIndex,
+                              onTap: () => c.selectSet(i),
+                              onLongPress: () => _editSet(i),
+                            ),
+                          _AddSetButton(onTap: c.addSet),
+                          // Keep the last rows reachable above the sheet.
+                          const SizedBox(height: 420),
+                        ],
                       ),
+                    ),
                   ],
                 ),
                 DraggableScrollableSheet(
@@ -84,9 +160,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.controller});
+  const _TopBar({required this.controller, required this.onFinish});
 
   final LiveWorkoutController controller;
+  final VoidCallback onFinish;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +208,7 @@ class _TopBar extends StatelessWidget {
               color: AppColors.card,
               icon: const Icon(Icons.more_horiz, color: AppColors.textPrimary),
               onSelected: (v) {
-                if (v == 'finish') Navigator.of(context).maybePop();
+                if (v == 'finish') onFinish();
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'finish', child: Text('Finish workout')),
@@ -165,9 +242,10 @@ class _Pill extends StatelessWidget {
 }
 
 class _ExerciseHeader extends StatelessWidget {
-  const _ExerciseHeader({required this.exercise});
+  const _ExerciseHeader({required this.exercise, required this.onEdit});
 
   final Exercise exercise;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -201,8 +279,12 @@ class _ExerciseHeader extends StatelessWidget {
             ),
           ),
           const Icon(Icons.visibility_outlined, color: AppColors.textPrimary),
-          const SizedBox(width: 18),
-          const Icon(Icons.tune, color: AppColors.textPrimary),
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: 'Edit current set',
+            onPressed: onEdit,
+            icon: const Icon(Icons.tune, color: AppColors.textPrimary),
+          ),
         ],
       ),
     );
@@ -447,6 +529,31 @@ class _CaptureControls extends StatelessWidget {
         const SizedBox(width: 10),
         _RoundIcon(icon: Icons.undo, onTap: c.undoRep, tooltip: 'Undo rep'),
       ],
+    );
+  }
+}
+
+class _AddSetButton extends StatelessWidget {
+  const _AddSetButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textSecondary,
+          side: const BorderSide(color: AppColors.divider),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        onPressed: onTap,
+        icon: const Icon(Icons.add),
+        label: const Text('Add set'),
+      ),
     );
   }
 }

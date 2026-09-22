@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/mock_data.dart';
+import '../state/app_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/device_ring.dart';
 import 'live_workout_screen.dart';
@@ -12,8 +13,9 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = MockData.sessions();
-    final last = sessions.last;
+    final repo = AppScope.of(context);
+    final sessions = repo.sessions;
+    final last = repo.latest;
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -56,7 +58,7 @@ class HomeScreen extends StatelessWidget {
                 Expanded(
                   child: _MiniStat(
                     label: 'Last GPE',
-                    value: last.gpeMean.toStringAsFixed(1),
+                    value: last?.gpeMean.toStringAsFixed(1) ?? '-',
                     color: AppColors.green,
                   ),
                 ),
@@ -64,7 +66,7 @@ class HomeScreen extends StatelessWidget {
                 Expanded(
                   child: _MiniStat(
                     label: 'Last power',
-                    value: '${last.powerMean.round()} W',
+                    value: last == null ? '-' : '${last.powerMean.round()} W',
                     color: AppColors.blue,
                   ),
                 ),

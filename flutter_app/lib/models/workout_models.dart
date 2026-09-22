@@ -70,6 +70,34 @@ class Exercise {
   final List<WorkoutSet> sets;
 
   int get setCount => sets.length;
+
+  /// Append a new set, copying the weight/reps of the last one by default.
+  WorkoutSet addSet({double? weightKg, int? targetReps}) {
+    final last = sets.isEmpty ? null : sets.last;
+    final set = WorkoutSet(
+      index: sets.length + 1,
+      weightKg: weightKg ?? last?.weightKg ?? 20,
+      targetReps: targetReps ?? last?.targetReps ?? 8,
+    );
+    sets.add(set);
+    return set;
+  }
+
+  /// Remove a set and renumber the ones after it.
+  void removeSetAt(int index) {
+    sets.removeAt(index);
+    for (var i = 0; i < sets.length; i++) {
+      sets[i] = sets[i].copyWith(index: i + 1);
+    }
+  }
+
+  /// Change weight / target reps of a set. Logged reps are kept.
+  void updateSet(int index, {double? weightKg, int? targetReps}) {
+    sets[index] = sets[index].copyWith(
+      weightKg: weightKg,
+      targetReps: targetReps,
+    );
+  }
 }
 
 /// A single training session used in the history charts.
@@ -91,6 +119,58 @@ class TrainingSession {
   final double powerMean;
   final double powerMin;
   final double powerMax;
+
+  /// Standard gravity, used to turn kg x m/s into watts.
+  static const double _g = 9.81;
+
+  /// Summarise a finished exercise into one history point.
+  /// Power per rep = weight x g x mean velocity; GPE comes from each set.
+  static TrainingSession? fromExercise(Exercise exercise, {DateTime? date}) {
+    final done = exercise.sets.where((s) => s.completed && s.reps > 0).toList();
+    if (done.isEmpty) return null;
+
+    final gpes = done.map((s) => s.gpe ?? 0).toList();
+    final powers = <double>[
+      for (final s in done)
+        for (final v in s.repVelocities) s.weightKg * _g * v,
+    ];
+
+    double mean(List<double> xs) =>
+        xs.fold<double>(0, (a, b) => a + b) / xs.length;
+
+    return TrainingSession(
+      date: date ?? DateTime.now(),
+      gpeMean: mean(gpes),
+      gpeMin: gpes.reduce(math.min),
+      gpeMax: gpes.reduce(math.max),
+      powerMean: mean(powers),
+      powerMin: powers.reduce(math.min),
+      powerMax: powers.reduce(math.max),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'date': date.toIso8601String(),
+        'gpeMean': gpeMean,
+        'gpeMin': gpeMin,
+        'gpeMax': gpeMax,
+        'powerMean': powerMean,
+        'powerMin': powerMin,
+        'powerMax': powerMax,
+      };
+
+  factory TrainingSession.fromJson(Map<String, dynamic> json) {
+    double d(String k) => (json[k] as num).toDouble();
+    return TrainingSession(
+      date: DateTime.parse(json['date'] as String),
+      gpeMean: d('gpeMean'),
+      gpeMin: d('gpeMin'),
+      gpeMax: d('gpeMax'),
+      powerMean: d('powerMean'),
+      powerMin: d('powerMin'),
+      powerMax: d('powerMax'),
+    );
+  }
 }
 
 /// Effort zones drawn as horizontal bands on the GPE chart.

@@ -42,11 +42,13 @@ class SetRow extends StatelessWidget {
     required this.set,
     required this.isActive,
     this.onTap,
+    this.onLongPress,
   });
 
   final WorkoutSet set;
   final bool isActive;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +68,7 @@ class SetRow extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Container(
             height: 52,
             decoration: BoxDecoration(

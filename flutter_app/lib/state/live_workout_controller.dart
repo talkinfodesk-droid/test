@@ -1,15 +1,21 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
 import '../models/workout_models.dart';
+import '../sensors/rep_sensor.dart';
 
-/// Drives the live tracking screen: session clock, per-set rest clock, and
-/// the stream of reps coming from the (simulated) bar sensor.
+/// Drives the live tracking screen: session clock, per-set clock, the rep
+/// stream from the bar sensor, and set editing.
 class LiveWorkoutController extends ChangeNotifier {
-  LiveWorkoutController({required this.exercise, int? initialSetIndex})
-      : _random = math.Random(),
+  LiveWorkoutController({
+    required this.exercise,
+    RepSensor? sensor,
+    int? initialSetIndex,
+    Duration initialElapsed = const Duration(minutes: 2, seconds: 45),
+  })  : _ownsSensor = sensor == null,
+        sensor = sensor ?? SimulatedRepSensor(),
+        _elapsed = initialElapsed,
         _currentSet = initialSetIndex ??
             exercise.sets
                 .indexWhere((s) => !s.completed)
@@ -21,26 +27,32 @@ class LiveWorkoutController extends ChangeNotifier {
       }
       notifyListeners();
     });
+    _repSub = this.sensor.reps.listen(_onRep);
+    _connSub = this.sensor.connectionState.listen((_) {
+      if (!this.sensor.isConnected) _stopCapture();
+      notifyListeners();
+    });
   }
 
   final Exercise exercise;
-  final math.Random _random;
+  final RepSensor sensor;
+  final bool _ownsSensor;
 
   Timer? _sessionTimer;
-  Timer? _repTimer;
+  StreamSubscription<RepEvent>? _repSub;
+  StreamSubscription<bool>? _connSub;
 
-  Duration _elapsed = const Duration(minutes: 2, seconds: 45);
+  Duration _elapsed;
   Duration _setElapsed = Duration.zero;
   DateTime? _setStartedAt;
   int _currentSet;
-  bool _sensorConnected = true;
   bool _capturing = false;
 
   Duration get elapsed => _elapsed;
   Duration get setElapsed => _setElapsed;
   int get currentSetIndex => _currentSet;
   WorkoutSet get currentSet => exercise.sets[_currentSet];
-  bool get sensorConnected => _sensorConnected;
+  bool get sensorConnected => sensor.isConnected;
   bool get isCapturing => _capturing;
 
   /// Volume across every rep performed so far (completed sets + live set).
@@ -51,6 +63,8 @@ class LiveWorkoutController extends ChangeNotifier {
 
   bool get allSetsDone => exercise.sets.every((s) => s.completed);
 
+  // ---------------------------------------------------------------- sets
+
   void selectSet(int index) {
     if (index < 0 || index >= exercise.sets.length) return;
     _stopCapture();
@@ -58,48 +72,72 @@ class LiveWorkoutController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleSensor() {
-    _sensorConnected = !_sensorConnected;
-    if (!_sensorConnected) _stopCapture();
+  void addSet({double? weightKg, int? targetReps}) {
+    exercise.addSet(weightKg: weightKg, targetReps: targetReps);
+    if (allSetsDoneExceptLast) _currentSet = exercise.sets.length - 1;
     notifyListeners();
   }
 
-  /// Start "listening" to the sensor. Reps arrive about every 1.5 s with a
-  /// velocity that decays as fatigue builds, until the target is reached.
+  bool get allSetsDoneExceptLast =>
+      exercise.sets.take(exercise.sets.length - 1).every((s) => s.completed);
+
+  void updateSet(int index, {double? weightKg, int? targetReps}) {
+    if (index < 0 || index >= exercise.sets.length) return;
+    exercise.updateSet(index, weightKg: weightKg, targetReps: targetReps);
+    notifyListeners();
+  }
+
+  /// Sets can be removed while there is more than one and it isn't live.
+  bool canRemoveSet(int index) =>
+      exercise.sets.length > 1 && !(index == _currentSet && _capturing);
+
+  void removeSet(int index) {
+    if (!canRemoveSet(index)) return;
+    exercise.removeSetAt(index);
+    if (_currentSet >= exercise.sets.length) {
+      _currentSet = exercise.sets.length - 1;
+    }
+    notifyListeners();
+  }
+
+  // -------------------------------------------------------------- sensor
+
+  Future<void> toggleSensor() async {
+    if (sensor.isConnected) {
+      await sensor.disconnect();
+    } else {
+      await sensor.connect();
+    }
+    notifyListeners();
+  }
+
+  /// Arm the sensor for the current set.
   void startCapture() {
-    if (currentSet.completed || !_sensorConnected || _capturing) return;
+    if (currentSet.completed || !sensor.isConnected || _capturing) return;
     _capturing = true;
     _setStartedAt = DateTime.now();
     _setElapsed = Duration.zero;
-    _repTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-      _detectRep();
-    });
+    sensor.startSet(
+      targetReps: currentSet.targetReps - currentSet.reps,
+      weightKg: currentSet.weightKg,
+    );
     notifyListeners();
   }
 
-  /// Manually log one rep (for demo use without a sensor).
+  /// Manually log one rep (demo without a sensor).
   void addRep() {
     if (currentSet.completed) return;
     _setStartedAt ??= DateTime.now();
-    _detectRep();
+    final s = sensor;
+    final v = s is SimulatedRepSensor ? s.sampleVelocity() : 0.4;
+    _onRep(RepEvent(meanVelocity: v, at: DateTime.now()));
   }
 
-  void _detectRep() {
+  void _onRep(RepEvent event) {
     final set = currentSet;
-    if (set.completed) {
-      _stopCapture();
-      return;
-    }
-    if (set.reps >= set.targetReps) {
-      completeCurrentSet();
-      return;
-    }
-    final base = set.repVelocities.isEmpty
-        ? 0.36 + _random.nextDouble() * 0.10
-        : set.repVelocities.last;
-    final jitter = (_random.nextDouble() - 0.55) * 0.06;
-    final next = (base + jitter).clamp(0.15, 0.95);
-    set.repVelocities.add(double.parse(next.toStringAsFixed(2)));
+    if (set.completed) return;
+    set.repVelocities.add(event.meanVelocity);
+    if (set.reps >= set.targetReps) completeCurrentSet();
     notifyListeners();
   }
 
@@ -121,8 +159,7 @@ class LiveWorkoutController extends ChangeNotifier {
   }
 
   void _stopCapture() {
-    _repTimer?.cancel();
-    _repTimer = null;
+    sensor.stopSet();
     _capturing = false;
     _setStartedAt = null;
     _setElapsed = Duration.zero;
@@ -131,7 +168,9 @@ class LiveWorkoutController extends ChangeNotifier {
   @override
   void dispose() {
     _sessionTimer?.cancel();
-    _repTimer?.cancel();
+    _repSub?.cancel();
+    _connSub?.cancel();
+    if (_ownsSensor) sensor.dispose();
     super.dispose();
   }
 }

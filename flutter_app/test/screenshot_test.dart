@@ -10,10 +10,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gpath_tracker/data/mock_data.dart';
+import 'package:gpath_tracker/data/workout_repository.dart';
 import 'package:gpath_tracker/screens/history_screen.dart';
 import 'package:gpath_tracker/screens/live_workout_screen.dart';
 import 'package:gpath_tracker/screens/root_shell.dart';
+import 'package:gpath_tracker/state/app_scope.dart';
 import 'package:gpath_tracker/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Roboto + Material Icons ship with the Flutter SDK; FLUTTER_ROOT is set by
 /// `flutter test`.
@@ -36,15 +39,24 @@ Future<void> _loadFonts() async {
   }
 }
 
-Future<void> _snap(WidgetTester tester, Widget home, String name) async {
+Future<void> _snap(
+  WidgetTester tester,
+  WorkoutRepository repo,
+  Widget home,
+  String name,
+) async {
   final key = GlobalKey();
   await tester.pumpWidget(
     RepaintBoundary(
       key: key,
-      child: MaterialApp(
+      child: AppScope(
+        repository: repo,
+        child: MaterialApp(
           theme: AppTheme.dark(),
           debugShowCheckedModeBanner: false,
-          home: home),
+          home: home,
+        ),
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 600));
@@ -65,12 +77,22 @@ void main() {
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
 
+    SharedPreferences.setMockInitialValues({});
+    final repo =
+        WorkoutRepository(prefs: await SharedPreferences.getInstance());
+    await repo.load();
+
     await tester.runAsync(() async {
-      await _snap(tester, const RootShell(), 'home');
-      await _snap(tester, const HistoryScreen(), 'history');
+      await _snap(tester, repo, const RootShell(), 'home');
+      await _snap(tester, repo, const HistoryScreen(), 'history');
       final ex = MockData.machinePulldown();
       ex.sets[2].repVelocities.addAll([0.39, 0.37, 0.43, 0.41]);
-      await _snap(tester, LiveWorkoutScreen(exercise: ex), 'live_workout');
+      await _snap(
+        tester,
+        repo,
+        LiveWorkoutScreen(exercise: ex),
+        'live_workout',
+      );
     });
   });
 }
