@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:universal_ble/universal_ble.dart';
 
 import '../sensors/ble_rep_sensor.dart';
 import '../sensors/rep_sensor.dart';
@@ -36,16 +36,19 @@ class _SensorPickerSheet extends StatefulWidget {
 }
 
 class _SensorPickerSheetState extends State<_SensorPickerSheet> {
-  StreamSubscription<List<ScanResult>>? _scanSub;
-  StreamSubscription<bool>? _scanningSub;
-  StreamSubscription<BluetoothAdapterState>? _adapterSub;
+  StreamSubscription<BleDevice>? _scanSub;
+  StreamSubscription<AvailabilityState>? _availSub;
+  Timer? _scanTimer;
 
-  List<ScanResult> _results = const [];
+  /// Keyed by device id so repeated advertisements update in place.
+  final Map<String, BleDevice> _found = {};
   bool _scanning = false;
   bool _busy = false;
   String? _error;
-  BluetoothAdapterState _adapter = BluetoothAdapterState.unknown;
+  AvailabilityState _adapter = AvailabilityState.unknown;
   String? _lastDeviceId;
+
+  static const _scanDuration = Duration(seconds: 8);
 
   @override
   void initState() {
@@ -53,34 +56,60 @@ class _SensorPickerSheetState extends State<_SensorPickerSheet> {
     SensorPrefs.lastDevice().then((d) {
       if (mounted) setState(() => _lastDeviceId = d?.id);
     });
-    _adapterSub = BleSensorScanner.adapterState.listen((s) {
+    _scanSub = BleSensorScanner.results.listen((d) {
+      if (mounted) setState(() => _found[d.deviceId] = d);
+    });
+    _availSub = BleSensorScanner.availability.listen((s) {
       if (!mounted) return;
       setState(() => _adapter = s);
-      if (s == BluetoothAdapterState.on && !_scanning) _startScan();
+      if (s == AvailabilityState.poweredOn && !_scanning) _startScan();
     });
-    _scanSub = BleSensorScanner.results.listen((r) {
-      if (mounted) setState(() => _results = r);
-    });
-    _scanningSub = BleSensorScanner.isScanning.listen((v) {
-      if (mounted) setState(() => _scanning = v);
+    BleSensorScanner.currentAvailability().then((s) {
+      if (!mounted) return;
+      setState(() => _adapter = s);
+      if (s == AvailabilityState.poweredOn) _startScan();
+    }).catchError((Object e) {
+      if (mounted) setState(() => _error = 'Bluetooth unavailable: $e');
     });
   }
 
   Future<void> _startScan() async {
-    setState(() => _error = null);
+    if (_scanning) return;
+    setState(() {
+      _error = null;
+      _scanning = true;
+      _found.clear();
+    });
     try {
+      await BleSensorScanner.requestPermissions();
       await BleSensorScanner.start();
+      _scanTimer?.cancel();
+      _scanTimer = Timer(_scanDuration, _stopScan);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Scan failed: $e');
+      if (mounted) {
+        setState(() {
+          _scanning = false;
+          _error = 'Scan failed: $e';
+        });
+      }
     }
+  }
+
+  Future<void> _stopScan() async {
+    _scanTimer?.cancel();
+    _scanTimer = null;
+    try {
+      await BleSensorScanner.stop();
+    } catch (_) {}
+    if (mounted) setState(() => _scanning = false);
   }
 
   @override
   void dispose() {
     _scanSub?.cancel();
-    _scanningSub?.cancel();
-    _adapterSub?.cancel();
-    BleSensorScanner.stop();
+    _availSub?.cancel();
+    _scanTimer?.cancel();
+    BleSensorScanner.stop().catchError((_) {});
     super.dispose();
   }
 
@@ -91,17 +120,17 @@ class _SensorPickerSheetState extends State<_SensorPickerSheet> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _pair(ScanResult r) async {
+  Future<void> _pair(BleDevice d) async {
     setState(() {
       _busy = true;
       _error = null;
     });
-    await BleSensorScanner.stop();
-    final sensor = BleRepSensor(r.device);
+    await _stopScan();
+    final sensor = BleRepSensor(deviceId: d.deviceId, name: d.name);
     try {
       await sensor.connect();
       await widget.controller.setSensor(sensor);
-      await SensorPrefs.remember(r.device.remoteId.str, sensor.name);
+      await SensorPrefs.remember(d.deviceId, sensor.name);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       await sensor.dispose();
@@ -173,28 +202,26 @@ class _SensorPickerSheetState extends State<_SensorPickerSheet> {
             onTap: _busy || usingSim ? null : _useSimulator,
           ),
           const SizedBox(height: 8),
-          if (_adapter == BluetoothAdapterState.off)
+          if (_adapter == AvailabilityState.poweredOff)
             const _Note('Bluetooth is off. Turn it on to find the sensor.')
-          else if (_results.isEmpty)
+          else if (_adapter == AvailabilityState.unsupported)
+            const _Note('This device has no Bluetooth LE.')
+          else if (_found.isEmpty)
             _Note(_scanning
                 ? 'Looking for GPATH boards…'
                 : 'No sensor found. Power the ESP32-S3 board and scan again.')
           else
-            for (final r in _results)
+            for (final d in _found.values)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _Option(
                   icon: Icons.bluetooth,
-                  title: r.device.platformName.isNotEmpty
-                      ? r.device.platformName
-                      : r.advertisementData.advName.isNotEmpty
-                          ? r.advertisementData.advName
-                          : r.device.remoteId.str,
+                  title: (d.name?.isNotEmpty ?? false) ? d.name! : d.deviceId,
                   subtitle:
-                      '${r.rssi} dBm${r.device.remoteId.str == _lastDeviceId ? ' · last used' : ''}',
-                  selected: current is BleRepSensor &&
-                      current.device.remoteId == r.device.remoteId,
-                  onTap: _busy ? null : () => _pair(r),
+                      '${d.rssi ?? '?'} dBm${d.deviceId == _lastDeviceId ? ' · last used' : ''}',
+                  selected:
+                      current is BleRepSensor && current.deviceId == d.deviceId,
+                  onTap: _busy ? null : () => _pair(d),
                 ),
               ),
           if (_error != null) ...[

@@ -84,6 +84,22 @@ g++ -std=c++17 -I../gpath_bar_sensor rep_detector_test.cpp -o rep_test && ./rep_
 
 합성 벤치프레스 5렙에서 평균 속도 오차 0.005 m/s, 풀다운 방향 구분, 잡음 무시, 비활성 상태 무시를 검증합니다.
 
+## 라이선스 (상업적 사용)
+
+| 구성 | 라이선스 | 상업적 사용 |
+| --- | --- | --- |
+| 이 저장소의 펌웨어 코드 (`rep_detector.h`, `.ino`) | 프로젝트 라이선스 | 자유 |
+| SensorLib (QMI8658 드라이버) | MIT | 무료 |
+| GFX Library for Arduino (Arduino_GFX) | BSD-3-Clause | 무료 |
+| ESP32 BLE Arduino (코어 내장, NimBLE/Bluedroid 기반) | Apache-2.0 | 무료 |
+| ESP-IDF (코어가 올라타는 SDK) | Apache-2.0 | 무료 |
+| ESP32 Arduino core | LGPL-2.1 | 무료이나 조건 있음 (아래) |
+
+Arduino core는 LGPL-2.1이라 비용은 없지만, 펌웨어 바이너리를 판매·배포할 때 사용자가 core 부분을 교체해
+다시 링크할 수 있도록 오브젝트 파일이나 소스를 제공해야 합니다. 대부분의 ESP32 상용 제품이 이렇게 하거나,
+이 조건 자체를 피하려면 Arduino 없이 **ESP-IDF(Apache-2.0)** 로 포팅하면 됩니다. `rep_detector.h`는
+Arduino 의존성이 없어 그대로 옮길 수 있고, BLE·I²C·LCD 초기화만 IDF API로 다시 쓰면 됩니다.
+
 ## 알려진 한계
 
 - 가속도 단일 적분이라 한 phase 안에서 드리프트가 남습니다. 렙이 길수록(3초 이상) 오차가 커집니다.

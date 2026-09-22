@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:universal_ble/universal_ble.dart';
 
 import 'gpath_protocol.dart';
 import 'rep_sensor.dart';
@@ -12,32 +12,27 @@ import 'rep_sensor.dart';
 /// notifications. `startSet()` writes a START command so the firmware arms rep
 /// detection; every notification becomes a [RepEvent].
 ///
-/// flutter_blue_plus 2.x is free for personal / nonprofit use and needs a
-/// commercial license otherwise (see its LICENSE). Everything here sits behind
-/// [RepSensor], so swapping the BLE library touches only this file.
+/// Uses `universal_ble` (BSD-3-Clause, free for commercial use). Everything
+/// here sits behind [RepSensor], so swapping the BLE library touches only
+/// this file.
 class BleRepSensor implements RepSensor {
-  BleRepSensor(this.device, {this.license = License.nonprofit});
+  BleRepSensor({required this.deviceId, String? name}) : _name = name;
 
-  final BluetoothDevice device;
-  final License license;
+  final String deviceId;
+  final String? _name;
 
   final _reps = StreamController<RepEvent>.broadcast();
   final _connection = StreamController<bool>.broadcast();
 
-  BluetoothCharacteristic? _repChar;
-  BluetoothCharacteristic? _controlChar;
-  StreamSubscription<List<int>>? _repSub;
-  StreamSubscription<BluetoothConnectionState>? _stateSub;
+  StreamSubscription<Uint8List>? _repSub;
+  StreamSubscription<bool>? _stateSub;
   bool _connected = false;
+  bool _controlWithoutResponse = false;
 
   /// Whether the next set's concentric phase comes first (pulldown / row).
   bool concentricFirst = false;
 
-  String get name => device.platformName.isNotEmpty
-      ? device.platformName
-      : device.advName.isNotEmpty
-          ? device.advName
-          : device.remoteId.str;
+  String get name => (_name != null && _name.isNotEmpty) ? _name : deviceId;
 
   @override
   Stream<RepEvent> get reps => _reps.stream;
@@ -51,51 +46,53 @@ class BleRepSensor implements RepSensor {
   @override
   Future<void> connect() async {
     if (_connected) return;
-    await device.connect(
-        license: license, timeout: const Duration(seconds: 15));
+    await UniversalBle.connect(deviceId, timeout: const Duration(seconds: 15));
 
-    _stateSub ??= device.connectionState.listen((state) {
-      final now = state == BluetoothConnectionState.connected;
-      if (now != _connected) {
-        _connected = now;
-        if (!now) {
-          _repSub?.cancel();
-          _repSub = null;
-          _repChar = null;
-          _controlChar = null;
-        }
-        _connection.add(now);
-      }
-    });
+    _stateSub ??= UniversalBle.connectionStream(deviceId).listen(_onState);
 
-    final services = await device.discoverServices();
-    final service = services.cast<BluetoothService?>().firstWhere(
-          (s) => s!.uuid == Guid(GpathProtocol.serviceUuid),
-          orElse: () => null,
-        );
+    final services = await UniversalBle.discoverServices(deviceId);
+    final service = services
+        .where((s) => _sameUuid(s.uuid, GpathProtocol.serviceUuid))
+        .firstOrNull;
     if (service == null) {
-      await device.disconnect();
+      await UniversalBle.disconnect(deviceId);
       throw StateError('Device does not expose the GPath service');
     }
+    BleCharacteristic? repChar;
+    BleCharacteristic? controlChar;
     for (final c in service.characteristics) {
-      if (c.uuid == Guid(GpathProtocol.repCharUuid)) _repChar = c;
-      if (c.uuid == Guid(GpathProtocol.controlCharUuid)) _controlChar = c;
+      if (_sameUuid(c.uuid, GpathProtocol.repCharUuid)) repChar = c;
+      if (_sameUuid(c.uuid, GpathProtocol.controlCharUuid)) controlChar = c;
     }
-    if (_repChar == null || _controlChar == null) {
-      await device.disconnect();
+    if (repChar == null || controlChar == null) {
+      await UniversalBle.disconnect(deviceId);
       throw StateError('GPath service is missing a characteristic');
     }
+    _controlWithoutResponse = controlChar.properties
+        .contains(CharacteristicProperty.writeWithoutResponse);
 
-    await _repChar!.setNotifyValue(true);
-    _repSub = _repChar!.onValueReceived.listen(_onNotification);
+    _repSub = UniversalBle.characteristicValueStream(deviceId, repChar.uuid)
+        .listen(_onNotification);
+    await UniversalBle.subscribeNotifications(
+      deviceId,
+      service.uuid,
+      repChar.uuid,
+    );
 
-    if (!_connected) {
-      _connected = true;
-      _connection.add(true);
-    }
+    _onState(true);
   }
 
-  void _onNotification(List<int> bytes) {
+  void _onState(bool connected) {
+    if (connected == _connected) return;
+    _connected = connected;
+    if (!connected) {
+      _repSub?.cancel();
+      _repSub = null;
+    }
+    _connection.add(connected);
+  }
+
+  void _onNotification(Uint8List bytes) {
     final packet = RepPacket.decode(bytes);
     if (packet == null) {
       debugPrint('BleRepSensor: ignoring ${bytes.length}-byte packet');
@@ -107,7 +104,12 @@ class BleRepSensor implements RepSensor {
   @override
   Future<void> disconnect() async {
     await _write(ControlPacket.stopSet(), quiet: true);
-    await device.disconnect();
+    try {
+      await UniversalBle.disconnect(deviceId);
+    } catch (e) {
+      debugPrint('BleRepSensor: disconnect failed: $e');
+    }
+    _onState(false);
   }
 
   @override
@@ -128,11 +130,16 @@ class BleRepSensor implements RepSensor {
 
   Future<void> tare() => _write(ControlPacket.tare());
 
-  Future<void> _write(List<int> bytes, {bool quiet = false}) async {
-    final c = _controlChar;
-    if (c == null || !_connected) return;
+  Future<void> _write(Uint8List bytes, {bool quiet = false}) async {
+    if (!_connected) return;
     try {
-      await c.write(bytes, withoutResponse: c.properties.writeWithoutResponse);
+      await UniversalBle.write(
+        deviceId,
+        GpathProtocol.serviceUuid,
+        GpathProtocol.controlCharUuid,
+        bytes,
+        withoutResponse: _controlWithoutResponse,
+      );
     } catch (e) {
       if (!quiet) debugPrint('BleRepSensor: write failed: $e');
     }
@@ -144,30 +151,39 @@ class BleRepSensor implements RepSensor {
     await _stateSub?.cancel();
     if (_connected) {
       try {
-        await device.disconnect();
+        await UniversalBle.disconnect(deviceId);
       } catch (_) {}
     }
     await _reps.close();
     await _connection.close();
   }
+
+  static bool _sameUuid(String a, String b) =>
+      a.toLowerCase() == b.toLowerCase();
 }
 
 /// Scans for boards advertising the GPath service.
 class BleSensorScanner {
   BleSensorScanner._();
 
-  static Stream<List<ScanResult>> get results => FlutterBluePlus.scanResults;
-  static Stream<bool> get isScanning => FlutterBluePlus.isScanning;
-  static Stream<BluetoothAdapterState> get adapterState =>
-      FlutterBluePlus.adapterState;
+  static Stream<BleDevice> get results => UniversalBle.scanStream;
+  static Stream<AvailabilityState> get availability =>
+      UniversalBle.availabilityStream;
 
-  static Future<void> start({Duration timeout = const Duration(seconds: 8)}) {
-    return FlutterBluePlus.startScan(
-      withServices: [Guid(GpathProtocol.serviceUuid)],
-      timeout: timeout,
-      androidUsesFineLocation: false,
+  static Future<AvailabilityState> currentAvailability() =>
+      UniversalBle.getBluetoothAvailabilityState();
+
+  /// Asks for the runtime BLE permissions (Android 12+ scan/connect).
+  static Future<void> requestPermissions() => UniversalBle.requestPermissions();
+
+  static Future<void> start() {
+    return UniversalBle.startScan(
+      scanFilter: ScanFilter(
+        withServices: [GpathProtocol.serviceUuid],
+        withNamePrefix: [GpathProtocol.deviceNamePrefix],
+      ),
     );
   }
 
-  static Future<void> stop() => FlutterBluePlus.stopScan();
+  static Future<void> stop() => UniversalBle.stopScan();
 }
